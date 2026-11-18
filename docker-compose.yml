@@ -1,0 +1,46 @@
+services:
+  postgres-db:
+    image: postgres:15-alpine
+    container_name: calisat-db-analytics
+    environment:
+      POSTGRES_DB: calisat_analytics
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5438:5432"
+    volumes:
+      - calisat_analytics_data:/var/lib/postgresql/data
+    networks:
+      - calisat-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d calisat_analytics"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: calisat-ms-analytics
+    ports:
+      - "8090:8090"
+    environment:
+      SERVER_PORT: "8090"
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/calisat_analytics
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP:-kafka:29092}
+      # Historial en DynamoDB (+2): SPRING_PROFILES_ACTIVE=dynamodb (credenciales por rol de la EC2)
+      SPRING_PROFILES_ACTIVE: ${ANALYTICS_PROFILE:-default}
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+    networks:
+      - calisat-net
+
+networks:
+  calisat-net:
+    name: calisat-net
+    driver: bridge
+
+volumes:
+  calisat_analytics_data:
